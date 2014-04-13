@@ -14,7 +14,7 @@ def CreateRandomLayer(nUnitsPrevious, nUnitsThisLayer):
 def sigmoid(X):
     return 1 / (1 + np.exp(-X))
 
-def CalculateCostFunction(X, y, model):
+def CalculateCostFunction(X, y, model, weightPenalty):
     # X.shape == (nExamples, nVis)
     # Y.shape == (nExamples)
     
@@ -25,6 +25,7 @@ def CalculateCostFunction(X, y, model):
     
     #Perform forward prop
     m, n  = X.shape
+    weightPenalty = float(weightPenalty)
     
     a1 = X
     z2 = np.dot(a1, model['W1']) + model['B1']
@@ -35,20 +36,23 @@ def CalculateCostFunction(X, y, model):
     
     hx = a3
     cost = 1./m * sum(sum(- y * np.log(hx) - (1-y) * np.log(1 - hx)))
+    cost += (weightPenalty / (2*m) ) * (np.sum(model['W1'] * model['W1']) + np.sum(model['W2'] * model['W2']))
     
     d3 = hx - y
     d2 = a2 * (1 - a2) * np.dot(d3, model["W2"].T)
     
     W2_grad = (1./m) * np.dot(a2.T, d3)
+    W2_grad += (weightPenalty / m) * model['W2']
     B2_grad = (1./m) * np.sum(d3, axis=0)
     W1_grad = (1./m) * np.dot(a1.T, d2)
+    W1_grad += (weightPenalty / m) * model['W1']
     B1_grad = (1./m) * np.sum(d2, axis=0)
     
     grads = {'W1' : W1_grad, 'W2' : W2_grad, 'B1' : B1_grad, 'B2' : B2_grad};
     return cost, grads
 
 
-def predict(X, y, model):
+def predict(X, model):
     # X.shape == (nExamples, nVis)
     # Y.shape == (nExamples)
     
@@ -69,7 +73,7 @@ def predict(X, y, model):
     
     return a3
 
-def checkGradients(costFunction, verbose = False):
+def checkGradients(costFunction, verbose = False, weightPenalty = 0.01):
     rngState = numpy.random.get_state()
     W1, B1 = CreateRandomLayer(200,100)
     W2, B2 = CreateRandomLayer(100, 10)
@@ -95,13 +99,13 @@ def checkGradients(costFunction, verbose = False):
         if(verbose):
             print "Checking %s, item %s" % (param, item)
         
-        cost, grad = costFunction(sampleX, sampleY, sampleModel)
+        cost, grad = costFunction(sampleX, sampleY, sampleModel,weightPenalty)
         
         sampleModel[param][item] = orig + epsilon
-        costPlus, gradPlus = costFunction(sampleX, sampleY, sampleModel)
+        costPlus, gradPlus = costFunction(sampleX, sampleY, sampleModel, weightPenalty)
         
         sampleModel[param][item] = orig - epsilon
-        costMinus, gradMinus = costFunction(sampleX, sampleY, sampleModel)
+        costMinus, gradMinus = costFunction(sampleX, sampleY, sampleModel, weightPenalty)
         
         sampleModel[param][item] = orig
         
@@ -115,13 +119,14 @@ def checkGradients(costFunction, verbose = False):
     print "Gradients OK"
 
 class CalculateCost:
-    def __init__ (self, X, y):
+    def __init__ (self, X, y, weightPenalty):
         self.X = X
         self.y = y
+        self.weightPenalty = weightPenalty
         
     def getCost (self, rolledParams):
 	model = UnrollParams(rolledParams)
-        cost, grads = CalculateCostFunction(self.X, self.y, model)
+        cost, grads = CalculateCostFunction(self.X, self.y, model, self.weightPenalty)
         return cost, RollParams(grads)
         
     
@@ -164,22 +169,27 @@ for i in range(trainY.shape[0]):
     
 checkGradients(CalculateCostFunction, True)
 
-calcCost = CalculateCost(X, y)
+calcCost = CalculateCost(X, y, 1.)
 
 #res = minimize(fun = calcCost.getCost, x0 = variables , method="L-BGFS-B", jac=True, options = { "maxiter" : 400, "disp" : True})
-res = fmin_l_bfgs_b(func = calcCost.getCost, approx_grad=False, x0 = variables, maxiter=  400, disp = True)
+res = fmin_l_bfgs_b(func = calcCost.getCost, approx_grad=False, x0 = variables, maxiter = 100, disp = True)
 
 
-alpha=0.001
+best_model = UnrollParams(res[0])
 
-for i in xrange(100):
-    for k in grads.keys():
-        model[k] = model[k] - alpha * grads[k]
-    cost, grads = calcCost.getCost(model)
-
-
-preds = predict(X,y, model)
+preds = predict(X,best_model)
 preds = preds.argmax(axis=1)
 
-sum(preds == trainY) / (preds.shape[0] * 1.0)
+sum(preds == testy) / (preds.shape[0] * 1.0)
+
+def loadImg(filename):
+    img = cv2.imread(filename, cv2.CV_LOAD_IMAGE_GRAYSCALE)
+    img = 255 - img
+    imgRes = cv2.resize(img, (28,28))
+    return imgRes.reshape(-1)
+
+y = numpy.asarray([8,4,0,6,7,1,9,2])
+numbers = numpy.asarray( [loadImg("%d.png" % f) for f in y])
+preds = predict(numbers, best_model).argmax(axis=1)
+acc = sum(preds == y) / (y.shape[0]*1.0)
 
