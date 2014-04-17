@@ -17,6 +17,8 @@ model.addLayer(layer2)
 
 trainX = np.load("mnist_train.X.npy")
 trainY = np.load("mnist_train.Y.npy")
+testX = np.load("mnist_test.X.npy").reshape(-1, nVis)
+testY = np.load("mnist_test.Y.npy")
 
 X = trainX.reshape(60000, -1)
 y = np.zeros((trainY.shape[0], nClass))
@@ -32,13 +34,14 @@ params = model.serialize()
     
 calcCost = FeedForwardNNCostFunction(X, y, modelDef, trainParams)
 
-best_params, best_cost = fmin_l_bfgs_b(func = calcCost.getCost, approx_grad=False, x0 = params, maxiter = 100, disp = True)
+res = fmin_l_bfgs_b(func = calcCost.getCost, approx_grad=False, x0 = params, maxiter = 100, disp = True)
 
+best_params = res[0]
 best_model = FeedForwardNN.deserialize(best_params, modelDef)
 
-probs = best_model.predict(X)
+probs = best_model.predict(testX)
 preds = probs.argmax(axis=1)
 
-accuracy = sum(preds == trainY) / (preds.shape[0] * 1.0)
+accuracy = sum(preds == testY) / (preds.shape[0] * 1.0)
 
-print "Accuracy: %.2f" % accuracy
+print "Test set accuracy: %.2f" % accuracy
